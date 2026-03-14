@@ -5,9 +5,6 @@ import Preview from "./components/Preview";
 import Toolbar from "./components/Toolbar";
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-const [lspPort, setLspPort] = useState<number | null>(null);
-
 interface CompileState {
   pdf: string | null; // base64-encoded PDF
   error: string | null;
@@ -51,6 +48,7 @@ export default function App() {
   const [content, setContent] = useState(DEFAULT_DOC);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [tempTypPath, setTempTypPath] = useState<string | null>(null);
+  const [lspPort, setLspPort] = useState<number | null>(null);
   const [compile, setCompile] = useState<CompileState>({
     pdf: null,
     error: null,
@@ -187,6 +185,7 @@ export default function App() {
       <Toolbar
         filename={filename}
         status={status}
+        errorMsg={compile.error}
         onOpen={handleOpen}
         onSave={handleSave}
         onSaveAs={handleSaveAs}
