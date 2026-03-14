@@ -61,9 +61,14 @@ export default function Editor({
   const viewRef = useRef<EditorView | null>(null);
   const externalRef = useRef(false);
   const lspCompartment = useRef(new Compartment());
+
+  // ── Always-fresh refs so closures never go stale ─────────────────────────
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const onDiagnosticsRef = useRef(onDiagnostics);
   onDiagnosticsRef.current = onDiagnostics;
 
+  // ── Mount editor once ────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -80,14 +85,12 @@ export default function Editor({
             "&": { height: "100%", background: "transparent" },
             ".cm-scroller": { overflow: "auto" },
             ".cm-gutters": { minWidth: "48px" },
-            // suppress the native hover tooltip entirely
             ".cm-tooltip-hover": { display: "none !important" },
           }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !externalRef.current) {
-              onChange(update.state.doc.toString());
+              onChangeRef.current(update.state.doc.toString());
             }
-            // Collect diagnostics on every update
             if (diagnosticCount(update.state) >= 0) {
               const diags: Diagnostic[] = [];
               forEachDiagnostic(update.state, (d, from) => {
@@ -113,6 +116,7 @@ export default function Editor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Sync external value (file open) ─────────────────────────────────────
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -126,6 +130,7 @@ export default function Editor({
     }
   }, [value]);
 
+  // ── Connect LSP when port + fileUri are ready ────────────────────────────
   useEffect(() => {
     if (!lspPort || !fileUri || !viewRef.current) return;
 
