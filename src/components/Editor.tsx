@@ -10,15 +10,24 @@ import {
   LSPClient,
   languageServerExtensions,
 } from "@codemirror/lsp-client";
+import { diagnosticCount, forEachDiagnostic } from "@codemirror/lint";
+
+interface Diagnostic {
+  from: number;
+  to: number;
+  severity: string;
+  message: string;
+  line: number;
+}
 
 interface Props {
   value: string;
   onChange: (value: string) => void;
   lspPort: number | null;
   fileUri: string | null;
+  onDiagnostics: (diags: Diagnostic[]) => void;
 }
 
-// ── WebSocket transport for @codemirror/lsp-client ────────────────────────
 function makeTransport(port: number): Promise<Transport> {
   const handlers: ((value: string) => void)[] = [];
   const sock = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -41,15 +50,20 @@ function makeTransport(port: number): Promise<Transport> {
   });
 }
 
-// ── Component ─────────────────────────────────────────────────────────────
-export default function Editor({ value, onChange, lspPort, fileUri }: Props) {
+export default function Editor({
+  value,
+  onChange,
+  lspPort,
+  fileUri,
+  onDiagnostics,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const externalRef = useRef(false);
-  // Compartment lets us swap the LSP extension in after the async connect
   const lspCompartment = useRef(new Compartment());
+  const onDiagnosticsRef = useRef(onDiagnostics);
+  onDiagnosticsRef.current = onDiagnostics;
 
-  // ── Mount editor once ────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -61,15 +75,32 @@ export default function Editor({ value, onChange, lspPort, fileUri }: Props) {
           oneDark,
           typst(),
           keymap.of([indentWithTab]),
-          lspCompartment.current.of([]), // placeholder — filled when LSP connects
+          lspCompartment.current.of([]),
           EditorView.theme({
             "&": { height: "100%", background: "transparent" },
             ".cm-scroller": { overflow: "auto" },
             ".cm-gutters": { minWidth: "48px" },
+            // suppress the native hover tooltip entirely
+            ".cm-tooltip-hover": { display: "none !important" },
           }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !externalRef.current) {
               onChange(update.state.doc.toString());
+            }
+            // Collect diagnostics on every update
+            if (diagnosticCount(update.state) >= 0) {
+              const diags: Diagnostic[] = [];
+              forEachDiagnostic(update.state, (d, from) => {
+                const line = update.state.doc.lineAt(from);
+                diags.push({
+                  from: d.from,
+                  to: d.to,
+                  severity: d.severity,
+                  message: d.message,
+                  line: line.number,
+                });
+              });
+              onDiagnosticsRef.current(diags);
             }
           }),
         ],
@@ -82,7 +113,6 @@ export default function Editor({ value, onChange, lspPort, fileUri }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Sync external value (file open) ─────────────────────────────────────
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -96,7 +126,6 @@ export default function Editor({ value, onChange, lspPort, fileUri }: Props) {
     }
   }, [value]);
 
-  // ── Connect LSP when port + fileUri are ready ────────────────────────────
   useEffect(() => {
     if (!lspPort || !fileUri || !viewRef.current) return;
 
@@ -106,8 +135,10 @@ export default function Editor({ value, onChange, lspPort, fileUri }: Props) {
         const transport = await makeTransport(lspPort);
         if (cancelled) return;
 
+        const rootUri = fileUri.substring(0, fileUri.lastIndexOf("/"));
         const client = new LSPClient({
           extensions: languageServerExtensions(),
+          rootUri,
         }).connect(transport);
 
         viewRef.current!.dispatch({

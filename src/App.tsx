@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Editor from "./components/Editor";
 import Preview from "./components/Preview";
 import Toolbar from "./components/Toolbar";
+import DiagnosticsPanel from "./components/DiagnosticsPanel";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface CompileState {
@@ -49,6 +50,7 @@ export default function App() {
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [tempTypPath, setTempTypPath] = useState<string | null>(null);
   const [lspPort, setLspPort] = useState<number | null>(null);
+  const [diagnostics, setDiagnostics] = useState<any[]>([]);
   const [compile, setCompile] = useState<CompileState>({
     pdf: null,
     error: null,
@@ -206,8 +208,10 @@ export default function App() {
                     ? `file://${tempTypPath}`
                     : null
               }
+              onDiagnostics={setDiagnostics}
             />
           </div>
+          <DiagnosticsPanel diagnostics={diagnostics} />
         </div>
 
         {/* Drag handle */}
