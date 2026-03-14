@@ -5,8 +5,11 @@ import Preview from "./components/Preview";
 import Toolbar from "./components/Toolbar";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+const [lspPort, setLspPort] = useState<number | null>(null);
+
 interface CompileState {
-  pdf: string | null;   // base64-encoded PDF
+  pdf: string | null; // base64-encoded PDF
   error: string | null;
 }
 
@@ -48,7 +51,10 @@ export default function App() {
   const [content, setContent] = useState(DEFAULT_DOC);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [tempTypPath, setTempTypPath] = useState<string | null>(null);
-  const [compile, setCompile] = useState<CompileState>({ pdf: null, error: null });
+  const [compile, setCompile] = useState<CompileState>({
+    pdf: null,
+    error: null,
+  });
   const [status, setStatus] = useState<Status>("idle");
   const [leftPct, setLeftPct] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -63,6 +69,14 @@ export default function App() {
       const path = await invoke<string>("get_temp_typ_path");
       setTempTypPath(path);
       await doCompile(path, DEFAULT_DOC);
+
+      // Start LSP bridge — non-fatal if tinymist isn't installed
+      try {
+        const port = await invoke<number>("start_lsp_bridge");
+        setLspPort(port);
+      } catch (e) {
+        console.warn("LSP unavailable:", e);
+      }
     })();
   }, []);
 
@@ -89,7 +103,7 @@ export default function App() {
         doCompile(tempTypPath, text);
       }, 600);
     },
-    [tempTypPath, doCompile]
+    [tempTypPath, doCompile],
   );
 
   // ── Editor change handler ────────────────────────────────────────────────
@@ -98,7 +112,7 @@ export default function App() {
       setContent(newContent);
       scheduleCompile(newContent);
     },
-    [scheduleCompile]
+    [scheduleCompile],
   );
 
   // ── File operations ──────────────────────────────────────────────────────
@@ -165,7 +179,7 @@ export default function App() {
 
   // ── Derive display filename ──────────────────────────────────────────────
   const filename = savedPath
-    ? savedPath.replace(/\\/g, "/").split("/").pop() ?? null
+    ? (savedPath.replace(/\\/g, "/").split("/").pop() ?? null)
     : null;
 
   return (
@@ -182,7 +196,18 @@ export default function App() {
         {/* Editor */}
         <div className="editor-pane" style={{ width: `${leftPct}%` }}>
           <div className="editor-wrap">
-            <Editor value={content} onChange={handleChange} />
+            <Editor
+              value={content}
+              onChange={handleChange}
+              lspPort={lspPort}
+              fileUri={
+                savedPath
+                  ? `file://${savedPath}`
+                  : tempTypPath
+                    ? `file://${tempTypPath}`
+                    : null
+              }
+            />
           </div>
         </div>
 
