@@ -5,15 +5,11 @@ import Preview from "./components/Preview";
 import Toolbar from "./components/Toolbar";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
 
-// ── Types ──────────────────────────────────────────────────────────────────
 interface CompileState {
-  pdf: string | null; // base64-encoded PDF
+  pdf: string | null;
   error: string | null;
 }
 
-type Status = "idle" | "compiling" | "ready" | "error";
-
-// ── Default document shown on launch ──────────────────────────────────────
 const DEFAULT_DOC = `#set page(paper: "a4", margin: 2.5cm)
 #set text(font: "New Computer Modern", size: 11pt)
 #set heading(numbering: "1.")
@@ -44,18 +40,16 @@ $ sum_(k=1)^n k = (n(n+1))/2 $
 _Edit this document to see changes in the preview →_
 `;
 
-// ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [content, setContent] = useState(DEFAULT_DOC);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [tempTypPath, setTempTypPath] = useState<string | null>(null);
-  const [lspPort, setLspPort] = useState<number | null>(null);
   const [diagnostics, setDiagnostics] = useState<any[]>([]);
+  const [lspPort, setLspPort] = useState<number | null>(null);
   const [compile, setCompile] = useState<CompileState>({
     pdf: null,
     error: null,
   });
-  const [status, setStatus] = useState<Status>("idle");
   const [leftPct, setLeftPct] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -63,14 +57,12 @@ export default function App() {
   const contentRef = useRef(content);
   contentRef.current = content;
 
-  // ── Bootstrap: get temp path and do an initial compile ──────────────────
   useEffect(() => {
     (async () => {
       const path = await invoke<string>("get_temp_typ_path");
       setTempTypPath(path);
       await doCompile(path, DEFAULT_DOC);
 
-      // Start LSP bridge — non-fatal if tinymist isn't installed
       try {
         const port = await invoke<number>("start_lsp_bridge");
         setLspPort(port);
@@ -80,21 +72,16 @@ export default function App() {
     })();
   }, []);
 
-  // ── Core compile function ────────────────────────────────────────────────
   const doCompile = useCallback(async (typPath: string, text: string) => {
-    setStatus("compiling");
     try {
       await invoke("write_file", { path: typPath, content: text });
       const pdf = await invoke<string>("compile_typst", { filePath: typPath });
       setCompile({ pdf, error: null });
-      setStatus("ready");
     } catch (err) {
       setCompile({ pdf: null, error: String(err) });
-      setStatus("error");
     }
   }, []);
 
-  // ── Schedule a debounced compile (used on keystroke) ────────────────────
   const scheduleCompile = useCallback(
     (text: string) => {
       if (!tempTypPath) return;
@@ -106,7 +93,6 @@ export default function App() {
     [tempTypPath, doCompile],
   );
 
-  // ── Editor change handler ────────────────────────────────────────────────
   const handleChange = useCallback(
     (newContent: string) => {
       setContent(newContent);
@@ -115,7 +101,6 @@ export default function App() {
     [scheduleCompile],
   );
 
-  // ── File operations ──────────────────────────────────────────────────────
   const handleOpen = async () => {
     const result = await invoke<[string, string] | null>("open_file_dialog");
     if (!result) return;
@@ -128,7 +113,6 @@ export default function App() {
   const handleSave = useCallback(async () => {
     const text = contentRef.current;
     if (!savedPath) {
-      // No file open yet — show Save As dialog
       const path = await invoke<string | null>("save_file_dialog");
       if (!path) return;
       setSavedPath(path);
@@ -147,7 +131,6 @@ export default function App() {
     await invoke("write_file", { path, content: contentRef.current });
   };
 
-  // ── Keyboard shortcut: Ctrl/Cmd + S ─────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -159,7 +142,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleSave]);
 
-  // ── Divider drag to resize ───────────────────────────────────────────────
   const handleDividerDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -177,7 +159,6 @@ export default function App() {
     window.addEventListener("mouseup", onUp);
   }, []);
 
-  // ── Derive display filename ──────────────────────────────────────────────
   const filename = savedPath
     ? (savedPath.replace(/\\/g, "/").split("/").pop() ?? null)
     : null;
@@ -186,15 +167,12 @@ export default function App() {
     <div className="app">
       <Toolbar
         filename={filename}
-        status={status}
-        errorMsg={compile.error}
         onOpen={handleOpen}
         onSave={handleSave}
         onSaveAs={handleSaveAs}
       />
 
       <div className="workspace">
-        {/* Editor */}
         <div className="editor-pane" style={{ width: `${leftPct}%` }}>
           <div className="editor-wrap">
             <Editor
@@ -214,13 +192,11 @@ export default function App() {
           <DiagnosticsPanel diagnostics={diagnostics} />
         </div>
 
-        {/* Drag handle */}
         <div
           className={`divider${isDragging ? " dragging" : ""}`}
           onMouseDown={handleDividerDown}
         />
 
-        {/* Preview */}
         <div className="preview-pane">
           <Preview pdf={compile.pdf} error={compile.error} />
         </div>
